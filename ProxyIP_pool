@@ -1,0 +1,113 @@
+import threading,time,random
+import requests,multiprocessing
+import queue
+def txt_read():
+        with open (r'd:\Python.py\First_meet\JDandTB_Spider\ip.txt','rt') as f:
+            while True:
+                yield f.readline()
+
+def url_open(ip):
+    try:
+        headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.75 Safari/537.36'}
+        proxies = {"http": ip}
+        requests.get("https://jiadian.jd.com/",headers = headers,proxies=proxies)
+    except Exception as e:
+        print(e)
+        return False
+    else:
+        print('%s is successful'%ip)
+        return True
+    
+def url_test(ip):
+    if url_open(ip):
+        pass
+    else:
+        ip_pool.remove(ip)
+
+
+
+class get_id(threading.Thread):
+    
+    def run(self):
+        global instruction
+        while True:
+            with con:
+                print('get_id start')
+                if 0 <= len(ip_pool) < 60:
+                    try:
+                        ip = next(ip_prepare).strip()
+                    except StopIteration:
+                        print('弹尽粮绝啦，请求后方支援')
+                    else:
+                        if ip.strip():
+                            ip_pool.append(ip)
+                            print('%s let ip_pool add a ip(%s),has %d id'%(threading.current_thread().name,ip,len(ip_pool)))
+                            instruction = True
+                            time.sleep(0.01)
+                            con.notify()
+                        else :
+                            pass
+                else :
+                    print('get_id wait')
+                    con.wait()
+            #time.sleep(random.random())
+
+
+class test_id(threading.Thread):    
+    def run(self):
+        global instruction
+        while True:
+            with con:
+                L = []
+                print('test start')
+                ip_copy = ip_pool[:]
+                if  59 < len(ip_pool) < 61 and instruction:
+                    for i in ip_copy:
+                        t = threading.Thread(target = url_test,args = (i,))
+                        t.start()
+                        L.append(t)
+                    for x in L:
+                        x.join()
+                    if len(ip_copy)>len(ip_pool):
+                        con.notify() 
+                    else:
+                        instruction = False
+                        print('test_ip is successful')
+                        q_out.put(1)
+                        con.wait()
+                else:
+                    print('test_id wait')
+                    con.wait()
+
+class monitor(threading.Thread):
+    def run(self):
+        while True:
+                q_come.get()
+                with con:
+                        con.notify()
+                        
+            
+class thread_IpPooL(threading.Thread):
+    def run(self):
+        ip_prepare = txt_read()
+        thread_get = get_id()
+        thread_test = test_id()
+        thread_monitor = monitor()
+        thread_get.start()
+        thread_test.start()
+        thread_monitor.start()
+
+instruction = True
+lock = threading.Lock()
+con = threading.Condition()
+ip_pool = []
+ip_prepare = txt_read()
+q_out = queue.Queue(1000)
+q_come = queue.Queue(1000)
+
+
+if __name__ == '__main__':
+    t = thread_IpPooL()
+    t.start()
+    t.join()
+    

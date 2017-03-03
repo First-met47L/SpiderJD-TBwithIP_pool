@@ -1,0 +1,43 @@
+import bs4,requests,time
+import threading,random,os
+headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.75 Safari/537.36'}
+lock = threading.Lock()
+class search_ip(threading.Thread):
+    def __init__(self,page):
+        self.page = page
+        super(search_ip,self).__init__()
+    def run(self):
+        Proxy_ip = []
+        url = 'http://www.xicidaili.com/nn/'+str(self.page)
+        r = requests.get(url,headers = headers)
+        html = r.content
+        soup = bs4.BeautifulSoup(html,'html.parser')
+        for i in soup.find_all('tr',class_ = 'odd'):
+            L = list(i.stripped_strings)
+            if 'HTTP' and '高匿' in L:
+                ip =  ':'.join(L[:2])
+                Proxy_ip.append(ip)
+        with lock:
+            with open(r'd:\Python.py\First_meet\JDandTB_Spider\ip.txt','at') as f:
+                for n in Proxy_ip:
+                    print(n)
+                    f.write(n+os.linesep)
+
+
+class IP_Spider(object):
+    def __init__(self,page):
+        L = []
+        for i in range(1,page+1):
+            t = search_ip(i)
+            L.append(t)
+            t.start()
+            time.sleep(random.random()*3)
+        for x in L:
+            x.join()            
+        
+            
+
+
+
+if __name__ == '__main__':
+    IP_Spider(20)

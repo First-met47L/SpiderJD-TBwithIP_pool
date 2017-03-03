@@ -1,0 +1,343 @@
+import requests,re,bs4,time
+import threading,random
+import multiprocessing
+import ProxyIP_Pool,queue
+import xlwt,os
+
+
+class DictForProc(dict):
+    def __getattr__(self,name):
+        return self[str(os.getpid()) + name]
+    def __setattr__(self,name,value):
+        self[str(os.getpid()) + name] = value
+
+        
+class JD_Homepage(threading.Thread):
+    def run(self):
+        proxies = {}
+        while True:
+            global homepage_List
+            if len(dictforproc.proxy_ip):
+                proxies['http'] = random.choice(dictforproc.proxy_ip)
+                r = requests.get("https://www.jd.com/",headers = headers,proxies=proxies)
+                html = r.content
+                soup = bs4.BeautifulSoup(html,'html.parser')
+                for i in soup.find_all(lambda tag:tag.has_attr('class')and tag.has_attr('data-index')):
+                    href = re.findall(r'//.+?com',str(i))
+                    n= zip([x for x in i.stripped_strings if x != '/'],href)
+                    for x,y in n:
+                        homepage_List.append(x)
+                homepage_List = homepage_List[:-8]
+                print(homepage_List)
+                break
+
+       
+class  JD_ParentSpider(threading.Thread):
+    def __init__(self,page):
+        self.page = page
+        super(JD_ParentSpider,self).__init__()
+    def run(self):
+        global JDwb
+        JDwb = xlwt.Workbook()
+        L = []
+        while True:
+            if len(dictforproc.proxy_ip):
+                for i in homepage_List:
+                    t = JD_spider(i,self.page)
+                    L.append(t)
+                    t.start()
+                for x in L:
+                    x.join()
+                JDwb.save(r'd:\Python.py\First_meet\JDandTB_Spider\JD.xls')
+                break
+                
+        
+            
+    
+
+class Get_url_name(str):
+    def __new__(cls,keyword):
+        proxies = {}
+        proxies['http'] = random.choice(dictforproc.proxy_ip)
+        payload = {'wd':keyword}
+        r = requests.get("https://www.jd.com/", params=payload,headers = headers,proxies=proxies)
+        x,y = re.search(r'/[?]wd=.+',r.url).span()
+        url_name = r.url[x+5:y]
+        return super(Get_url_name,cls).__new__(cls,url_name)
+
+class JDweb_parser(threading.Thread):
+    def __init__(self,html,sheet_name):
+        self.html = html
+        self.sheet_name = sheet_name
+        super(JDweb_parser,self).__init__()
+    def run(self):
+        sh = JDwb.add_sheet(self.sheet_name)
+        n = 0    
+        soup = bs4.BeautifulSoup(self.html,'html.parser')
+        all_Product = soup.find_all('li',class_="gl-item")
+        for i in all_Product:
+            com = i.find(lambda tag :tag.has_attr('href')and tag.has_attr('id')and tag.has_attr('onclick'))
+            comment = ''.join(list(com.strings)).replace('万+','').replace('+','')
+            if '.' in comment:
+                comment = str(int(float(comment)*10000))
+            else:
+                pass
+            price = i.find(lambda tag :tag.has_attr('class')and tag.has_attr('data-price')).i.string
+            product = ''.join(list(i.find_all('em')[1].strings))
+            print(product,price,comment)
+            sh.write(n,0,product)
+            sh.write(n,1,float(price))
+            sh.write(n,2,int(comment))
+            n += 1
+        
+
+
+class JD_spider(threading.Thread):
+    def __init__(self,search_name,page):
+        self.url = "https://search.jd.com/s_new.php?keyword="+Get_url_name(search_name)
+        self.payload = {'enc':'utf-8','page':'1','psort':'4','s':'1','scrolling':'y'}
+        self.page = page
+        self.sheet_name = search_name
+        super(JD_spider,self).__init__()
+    def run(self):
+        proxy_http = {}
+        tL = []
+        now_page = 0
+        count = 0
+        with open(r'd:\Python.py\First_meet\JDandTB_Spider\JD'+os.sep+self.sheet_name+'.txt','wb') as f:       
+            while True:
+                if len(dictforproc.proxy_ip):
+                    try:
+                        proxy_http['http'] = random.choice(dictforproc.proxy_ip)
+                        r = requests.get(self.url,headers = headers,proxies = proxy_http,params = self.payload)
+                    except Exception:
+                        with condition:                       
+                            count += 1
+                            if count > 5:
+                                q1_dict[os.getpid()].put([])
+                                dictforproc.proxy_ip= []
+                                condition.notify()
+                                condition.wait()
+                                print('again')
+                                continue
+                    else:
+                        if now_page < self.page:
+                            print(self.sheet_name+str(now_page))
+                            html = r.content
+                            f.write(html)
+                            self.payload['page'] = str(now_page + 1)
+                            self.payload['s']   =  str(now_page*30+1)
+                            now_page += 1
+
+                        else:
+                            break
+        with open(r'd:\Python.py\First_meet\JDandTB_Spider\JD'+os.sep+self.sheet_name+'.txt','rb') as f:
+            html = f.read()
+            t = JDweb_parser(html,self.sheet_name)  
+            t.start()
+            t.join()
+                        
+
+
+class  TaoBao_ParentSpider(threading.Thread):
+    def __init__(self,page):
+        self.page = page
+        super(TaoBao_ParentSpider,self).__init__()
+    def run(self):
+        global TBwb
+        TBwb = xlwt.Workbook()
+        spider_list = []
+        while True:
+            if len(dictforproc.proxy_ip):
+                for i in homepage_List:
+                    t = TaoBao_spider(i,self.page)
+                    spider_list.append(t)
+                    t.start()
+                for x in spider_list:
+                    x.join()
+                TBwb.save(r'd:\Python.py\First_meet\JDandTB_Spider\TaoBao.xls')
+                break                    
+            
+        
+
+class TaoBao_spider(threading.Thread):
+    def __init__(self,search_name,page):
+        if search_name == '手机':
+            self.url = 'https://s.taobao.com/api?&q=%E6%89%8B%E6%9C%BA'
+            self.payload ={'m':'customized','ie':'utf8','psort':'_lw_quantity','s':'1'}
+            self.page = page*5
+        else:
+            self.url = 'https://s.taobao.com/search?q='+Get_url_name(search_name)
+            self.payload = {'s': '1','ie':'utf8','sort':'renqi-desc'}
+            self.page = page
+        self.sheet_name = search_name
+        super(TaoBao_spider,self).__init__()
+    def run(self):
+        proxy_http = {}
+        tL = []
+        now_page = 0
+        count = 0
+        with open(r'd:\Python.py\First_meet\JDandTB_Spider\TaoBao'+os.sep+self.sheet_name+'.txt','wt') as f:
+            while True:
+                if len(dictforproc.proxy_ip):
+                    try:
+                        proxy_http['http'] = random.choice(dictforproc.proxy_ip)
+                        r = requests.get(self.url,headers = headers,proxies = proxy_http,params = self.payload)
+                    except Exception:
+                        with condition:                       
+                            count += 1
+                            if count > 5:
+                                q1_dict[os.getpid()].put([])
+                                dictforproc.proxy_ip= []
+                                condition.notify()
+                                condition.wait()
+                                print('again')
+                                continue
+                    else:
+                        if now_page < self.page:
+                            print(self.sheet_name+str(now_page))
+                            html = r.text
+                            f.write(html)
+                            self.payload['s'] = str(now_page*44+1)
+                            now_page += 1
+
+                        else:
+                            break
+        with open(r'd:\Python.py\First_meet\JDandTB_Spider\TaoBao'+os.sep+self.sheet_name+'.txt','rt') as f:
+            html = f.read()
+            t = TaoBao_web_parser(html,self.sheet_name)  
+            t.start()
+            t.join()
+
+
+
+
+
+
+
+
+class TaoBao_web_parser(threading.Thread):
+    def __init__(self,html,sheet_name):
+        self.html = html
+        self.sheet_name = sheet_name
+        super(TaoBao_web_parser,self).__init__()
+    def run(self):
+        sh = TBwb.add_sheet(self.sheet_name)
+        html = self.html
+        n = 0
+        while True:
+            try:
+                a,b = re.search(r'raw_title.+?"pic_url',html).span()         #if exception will raise AttributeError
+                product = html[a+12:b-10]
+                html = html[b:]
+                a,b = re.search(r'view_price.+?"view_fee"',html).span()
+                if re.search(r'([0-9.]+)',html[a:b]):
+                    price = re.search(r'([0-9.]+)',html[a:b]).group(1)
+                else:
+                    price = 'None'
+                html = html[b:]
+                a,b = re.search(r'comment_count.+?user_id',html).span()
+                if re.search(r'([0-9.]+)',html[a:b]):
+                    comment_count = re.search(r'([0-9.]+)',html[a:b]).group(1)
+                else :
+                    comment_count = '0'
+                html = html[b:]
+                print(product,price,comment_count)
+                sh.write(n,0,product)
+                sh.write(n,1,float(price))
+                sh.write(n,2,int(comment_count))
+                n += 1 
+            except AttributeError:
+                break
+            
+                                 
+       
+       
+
+
+
+
+
+
+
+
+
+class IP_pool(multiprocessing.Process):
+    def __init__(self,q1,q2):
+        self.q1 = q1   #get
+        self.q2 = q2   #send
+        super(IP_pool,self).__init__()
+    def run(self):
+        t = ProxyIP_Pool.thread_IpPooL()
+        t.start()
+        while True:
+            if ProxyIP_Pool.q_out.get():            #get successful_ip from thread
+                self.q2.put(ProxyIP_Pool.ip_pool)   #send pool
+            ProxyIP_Pool.ip_pool = self.q1.get()    # wait to receive the change signal and change thead ip_pool 
+            ProxyIP_Pool.q_come.put(1)              #let monitor start up the 'get_id'                       
+        
+
+
+class IP_Count(threading.Thread):
+    def run(self):
+        global q1_dict
+        q1_dict[os.getpid()] = multiprocessing.Queue(100) #send
+        q2 = multiprocessing.Queue(100)                    #get
+        P = IP_pool(q1_dict[os.getpid()],q2)
+        dictforproc.P = P
+        P.start()
+        while True:
+            with condition:
+                dictforproc.proxy_ip = q2.get()                  #get proxy_ip_pool from identification  
+                print('get proxy_ip_pool from identification' )
+                condition.notify()
+                condition.wait()
+    
+
+
+class JD_start(object):
+    def __init__(self,page = 40):
+        self.page = page
+    def start(self):
+        dictforproc.proxy_ip = []
+        t = IP_Count()
+        t.setDaemon(True)       #Daemon for pthread
+        t.start()
+        t1 = JD_Homepage()
+        t1.start()
+        t1.join()
+        t2 = JD_ParentSpider(self.page)
+        t2.start()
+        t2.join()
+        print('end')
+
+
+
+class TaoBao_start(object):
+    def __init__(self,page = 20):
+        self.page = page
+    def start(self):
+        dictforproc.proxy_ip = []
+        t = IP_Count()
+        t.setDaemon(True)       #Daemon for pthread
+        t.start()
+        t1 = JD_Homepage()
+        t1.start()
+        t1.join()
+        t2 =TaoBao_ParentSpider(self.page)
+        t2.start()
+        t2.join()
+        print('end')
+
+
+
+headers = {'User-Agent':'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/49.0.2623.75 Safari/537.36'}
+homepage_List = []
+condition = threading.Condition()
+q1_dict = {}
+dictforproc = DictForProc()
+
+
+if __name__=='__main__':
+    #JD_start(60).start()
+    TaoBao_start(30).start()
